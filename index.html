@@ -1,0 +1,372 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Teia Cósmica Interativa</title>
+    <style>
+        /* ==========================================================================
+           ESTILOS (CSS)
+           ========================================================================== */
+        
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            user-select: none;
+        }
+
+        body {
+            background-color: #05020c; 
+            overflow: hidden;
+            height: 100vh;
+            width: 100vw;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            cursor: none; /* Esconde o cursor padrão */
+        }
+
+        a, button, canvas {
+            cursor: none !important;
+        }
+
+        /* Camada da Névoa Galáctica */
+        .nebula-overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: radial-gradient(circle at 30% 40%, rgba(76, 29, 149, 0.25) 0%, transparent 50%),
+                        radial-gradient(circle at 70% 70%, rgba(124, 58, 237, 0.2) 0%, transparent 60%);
+            z-index: 1;
+            pointer-events: none;
+        }
+
+        /* Camada de Aurora Fluida */
+        .aurora-overlay {
+            position: absolute;
+            top: -50%;
+            left: -50%;
+            width: 200%;
+            height: 200%;
+            background: radial-gradient(ellipse at center, rgba(168, 85, 247, 0.08) 0%, rgba(0,0,0,0) 70%);
+            z-index: 2;
+            animation: auroraWave 25s ease-in-out infinite alternate;
+            pointer-events: none;
+            filter: blur(40px);
+        }
+
+        @keyframes auroraWave {
+            0% { transform: translate(0, 0) scale(1); }
+            50% { transform: translate(-5%, 10%) scale(1.1); }
+            100% { transform: translate(10%, -5%) scale(0.9); }
+        }
+
+        /* Camada de Grade Espacial */
+        .grid-overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-image: 
+                linear-gradient(rgba(168, 85, 247, 0.04) 1px, transparent 1px),
+                linear-gradient(90deg, rgba(168, 85, 247, 0.04) 1px, transparent 1px);
+            background-size: 50px 50px;
+            background-position: center;
+            z-index: 3;
+            pointer-events: none;
+        }
+
+        canvas {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: 4;
+        }
+
+        /* Painel do Relógio Centralizado no Topo */
+        .clock-container {
+            position: absolute;
+            top: 40px;
+            left: 50%;
+            transform: translateX(-50%);
+            text-align: center;
+            z-index: 5;
+            pointer-events: none;
+        }
+
+        #date {
+            font-size: 0.85rem;
+            letter-spacing: 4px;
+            color: #c084fc;
+            opacity: 0.8;
+            margin-bottom: 5px;
+            text-shadow: 0 0 10px rgba(168, 85, 247, 0.4);
+        }
+
+        #time {
+            font-size: 3.5rem;
+            font-weight: 700;
+            color: #ffffff;
+            letter-spacing: 2px;
+            animation: purplePulse 3s ease-in-out infinite alternate;
+        }
+
+        @keyframes purplePulse {
+            0% {
+                text-shadow: 0 0 10px rgba(168, 85, 247, 0.6), 
+                             0 0 20px rgba(168, 85, 247, 0.4), 
+                             0 0 30px rgba(168, 85, 247, 0.2);
+            }
+            100% {
+                text-shadow: 0 0 20px rgba(192, 132, 252, 0.9), 
+                     0 0 35px rgba(168, 85, 247, 0.7), 
+                     0 0 50px rgba(168, 85, 247, 0.4);
+            }
+        }
+    </style>
+</head>
+<body>
+
+    <div class="grid-overlay"></div>
+    <div class="aurora-overlay"></div>
+    <div class="nebula-overlay"></div>
+
+    <div class="clock-container">
+        <div id="date"></div>
+        <div id="time"></div>
+    </div>
+
+    <canvas id="canvas"></canvas>
+
+    <!-- ==========================================================================
+       LÓGICA E ANIMAÇÕES (JAVASCRIPT)
+       ========================================================================== -->
+    <script>
+        const canvas = document.getElementById('canvas');
+        const ctx = canvas.getContext('2d');
+
+        function resizeCanvas() {
+            canvas.width = window.innerWidth;
+            canvas.height = window.innerHeight;
+        }
+        resizeCanvas();
+        window.addEventListener('resize', resizeCanvas);
+
+        // Coordenadas reais do mouse (onde fica a bolinha central)
+        const mouse = { x: null, y: null, radius: 160 };
+        
+        // Coordenadas suavizadas para o anel externo seguir com atraso (Inércia)
+        const ring = { x: null, y: null };
+
+        window.addEventListener('mousemove', (e) => {
+            mouse.x = e.clientX;
+            mouse.y = e.clientY;
+            
+            // Inicializa a posição do anel no primeiro movimento
+            if (ring.x === null) {
+                ring.x = mouse.x;
+                ring.y = mouse.y;
+            }
+        });
+
+        window.addEventListener('mouseleave', () => {
+            mouse.x = null;
+            mouse.y = null;
+            ring.x = null;
+            ring.y = null;
+        });
+
+        const nodes = [];
+        const shootingStars = [];
+        const nodeCount = 85;
+
+        // Classe para os Nós do Fundo
+        class Node {
+            constructor() {
+                this.x = Math.random() * canvas.width;
+                this.y = Math.random() * canvas.height;
+                this.vx = (Math.random() - 0.5) * 0.7;
+                this.vy = (Math.random() - 0.5) * 0.7;
+                this.radius = Math.random() * 2 + 1;
+                this.pulseSpeed = Math.random() * 0.04 + 0.02;
+                this.pulseTimer = Math.random() * Math.PI;
+            }
+
+            update() {
+                this.x += this.vx;
+                this.y += this.vy;
+                this.pulseTimer += this.pulseSpeed;
+
+                if (this.x < 0 || this.x > canvas.width) this.vx *= -1;
+                if (this.y < 0 || this.y > canvas.height) this.vy *= -1;
+            }
+
+            draw() {
+                const pulse = Math.abs(Math.sin(this.pulseTimer));
+                const glowRadius = this.radius * (3 + pulse * 2);
+
+                ctx.beginPath();
+                ctx.arc(this.x, this.y, glowRadius, 0, Math.PI * 2);
+                ctx.fillStyle = `rgba(168, 85, 247, ${0.12 + pulse * 0.08})`;
+                ctx.fill();
+
+                ctx.beginPath();
+                ctx.arc(this.x, this.y, this.radius, 0, Math.PI * 2);
+                ctx.fillStyle = '#ffffff';
+                ctx.shadowBlur = 8;
+                ctx.shadowColor = '#a855f7';
+                ctx.fill();
+                ctx.shadowBlur = 0; 
+            }
+        }
+
+        // Classe para as Estrelas Cadentes
+        class ShootingStar {
+            constructor() {
+                this.reset();
+            }
+            reset() {
+                this.x = Math.random() * canvas.width;
+                this.y = Math.random() * (canvas.height / 2);
+                this.length = Math.random() * 80 + 40;
+                this.speed = Math.random() * 5 + 4;
+                this.vX = this.speed;
+                this.vY = this.speed * 0.5;
+                this.opacity = 1;
+                this.active = true;
+            }
+            update() {
+                this.x += this.vX;
+                this.y += this.vY;
+                this.opacity -= 0.015;
+                if (this.opacity <= 0 || this.x > canvas.width || this.y > canvas.height) {
+                    this.active = false;
+                }
+            }
+            draw() {
+                if (!this.active) return;
+                ctx.beginPath();
+                const grad = ctx.createLinearGradient(this.x, this.y, this.x - this.length, this.y - this.length * 0.5);
+                grad.addColorStop(0, `rgba(255, 255, 255, ${this.opacity})`);
+                grad.addColorStop(1, 'rgba(168, 85, 247, 0)');
+                ctx.strokeStyle = grad;
+                ctx.lineWidth = 1.8;
+                ctx.moveTo(this.x, this.y);
+                ctx.lineTo(this.x - this.length, this.y - this.length * 0.5);
+                ctx.stroke();
+            }
+        }
+
+        for (let i = 0; i < nodeCount; i++) {
+            nodes.push(new Node());
+        }
+
+        let mousePulse = 0;
+
+        // Loop principal
+        function animate() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            mousePulse += 0.03;
+
+            if (Math.random() < 0.007 && shootingStars.filter(s => s.active).length < 2) {
+                shootingStars.push(new ShootingStar());
+            }
+
+            shootingStars.forEach((star, index) => {
+                star.update();
+                star.draw();
+                if (!star.active) shootingStars.splice(index, 1);
+            });
+
+            nodes.forEach(node => {
+                node.update();
+                node.draw();
+            });
+
+            const allPoints = [...nodes];
+            
+            if (mouse.x !== null && ring.x !== null) {
+                // EFEITO DE INÉRCIA: O anel corre atrás da bolinha do mouse
+                // Quanto menor o multiplicador (ex: 0.08), mais o anel demora para alcançar
+                ring.x += (mouse.x - ring.x) * 0.09;
+                ring.y += (mouse.y - ring.y) * 0.09;
+
+                // Adiciona o ponto do mouse (A bolinha central puxa a teia)
+                allPoints.push({ x: mouse.x, y: mouse.y, isMouse: true });
+                
+                const currentPulse = Math.abs(Math.sin(mousePulse)) * 2;
+                
+                // 1. Desenha o ANEL SEGUIDOR (com atraso fluido)
+                ctx.beginPath();
+                ctx.arc(ring.x, ring.y, 18 + currentPulse, 0, Math.PI * 2);
+                ctx.strokeStyle = 'rgba(192, 132, 252, 0.5)'; 
+                ctx.lineWidth = 1.5;
+                ctx.stroke();
+                
+                ctx.beginPath();
+                ctx.arc(ring.x, ring.y, 18 + currentPulse, 0, Math.PI * 2);
+                ctx.fillStyle = 'rgba(168, 85, 247, 0.03)';
+                ctx.fill();
+
+                // 2. Desenha a BOLINHA DO MOUSE (Instantânea/Rápida)
+                ctx.beginPath();
+                ctx.arc(mouse.x, mouse.y, 3.5, 0, Math.PI * 2);
+                ctx.fillStyle = '#ffffff';
+                ctx.shadowBlur = 15;
+                ctx.shadowColor = '#ffffff';
+                ctx.fill();
+                ctx.shadowBlur = 0; 
+            }
+
+            // Conexões da teia de linhas
+            for (let i = 0; i < allPoints.length; i++) {
+                for (let j = i + 1; j < allPoints.length; j++) {
+                    const p1 = allPoints[i];
+                    const p2 = allPoints[j];
+
+                    const dx = p1.x - p2.x;
+                    const dy = p1.y - p2.y;
+                    const dist = Math.sqrt(dx * dx + dy * dy);
+
+                    let maxDist = 110;
+                    if (p1.isMouse || p2.isMouse) maxDist = mouse.radius;
+
+                    if (dist < maxDist) {
+                        const alpha = (1 - dist / maxDist) * 0.4;
+                        ctx.beginPath();
+                        ctx.moveTo(p1.x, p1.y);
+                        ctx.lineTo(p2.x, p2.y);
+                        
+                        ctx.strokeStyle = p1.isMouse || p2.isMouse 
+                            ? `rgba(216, 180, 254, ${alpha * 1.6})` 
+                            : `rgba(168, 85, 247, ${alpha})`;
+                        ctx.lineWidth = p1.isMouse || p2.isMouse ? 1.4 : 0.7;
+                        ctx.stroke();
+                    }
+                }
+            }
+
+            requestAnimationFrame(animate);
+        }
+        animate();
+
+        // Relógio
+        function updateClock() {
+            const now = new Date();
+            const options = { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' };
+            document.getElementById('date').innerText = now.toLocaleDateString('pt-BR', options).toUpperCase();
+
+            const hours = String(now.getHours()).padStart(2, '0');
+            const minutes = String(now.getMinutes()).padStart(2, '0');
+            const seconds = String(now.getSeconds()).padStart(2, '0');
+            document.getElementById('time').innerText = `${hours}:${minutes}:${seconds}`;
+        }
+        setInterval(updateClock, 1000);
+        updateClock();
+    </script>
+</body>
+</html>
